@@ -1,13 +1,11 @@
 const http = require('http');
 const https = require('https');
-const fs = require('fs');
-const path = require('path');
 const url = require('url');
 
 // FORCE SSL BYPASS
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
-const PORT = process.env.PORT || 3000; // Updated for Render compatibility
+const PORT = process.env.PORT || 3000;
 const BASE_URL = "https://coe.pgi-intraconnect.in/qpportal/app.php";
 
 // ================== 1. THE BACKEND (Scraper Logic) ==================
@@ -41,15 +39,21 @@ async function scrapeData(res, batchPrefix, start, end, univCode, yearMode) {
 
     let foundCount = 0;
 
+    // Send initial ping to confirm connection
+    sendMsg('log', 'Connected to server...');
+
     for (let i = start; i <= end; i++) {
         const regNo = `${batchPrefix}${pad(i)}`;
-        sendMsg('log', `Fetching ${regNo}...`);
-
+        
+        // Notify frontend we are checking this ID
+        // Note: The frontend decides if it wants to print this log
+        
         const detUrl = `${BASE_URL}?db=pub&a=getDetailedResults&regno=${regNo}&univcode=${univCode}&yearmode=${yearMode}`;
         const detJson = await secureGet(detUrl);
 
         if (!detJson || detJson.status !== 'success' || !detJson.data || !detJson.data.studdet) {
-            // Fast skip if empty
+            // Send a "scanning" event so the UI knows we are working, even if no result found
+            sendMsg('scanning', regNo);
             await sleep(50);
             continue;
         }
@@ -81,7 +85,7 @@ async function scrapeData(res, batchPrefix, start, end, univCode, yearMode) {
         const studentData = {
             regno: info.regno,
             name: info.name,
-            sgpa: sgpa, // Keep as string for display, convert for sort
+            sgpa: sgpa, 
             results: subjects
         };
 
@@ -95,7 +99,7 @@ async function scrapeData(res, batchPrefix, start, end, univCode, yearMode) {
     res.end();
 }
 
-// ================== 2. THE FRONTEND (Mobile Responsive Fixed) ==================
+// ================== 2. THE FRONTEND (Mobile Fixed + Stop Button) ==================
 
 const HTML_CONTENT = `
 <!DOCTYPE html>
@@ -103,11 +107,12 @@ const HTML_CONTENT = `
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>University Result Scraper</title>
+    <title>Result Scraper</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
         body { font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
+        
         .grade-O { color: #16a34a; font-weight: bold; }
         .grade-A_ { color: #22c55e; font-weight: bold; }
         .grade-A { color: #4ade80; font-weight: bold; }
@@ -115,67 +120,77 @@ const HTML_CONTENT = `
         .grade-B { color: #f59e0b; font-weight: bold; }
         .grade-C { color: #f97316; font-weight: bold; }
         .grade-F { color: #dc2626; font-weight: bold; background: #fee2e2; padding: 2px 6px; border-radius: 4px; }
-        .hidden-row { display: none; }
         
+        .hidden-row { display: none; }
         .fade-in { animation: fadeIn 0.3s ease-in; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-        
-        th { cursor: pointer; user-select: none; }
-        th:hover { background-color: #f3f4f6; }
 
-        /* --- MOBILE RESPONSIVE MAGIC --- */
+        /* --- MOBILE LAYOUT FIXES --- */
         @media (max-width: 768px) {
-            /* Hide the table header on mobile */
             thead { display: none; }
             
-            /* Turn rows into cards */
+            /* Card Style for Rows */
             tr.main-row { 
                 display: flex; 
                 flex-direction: column; 
+                background: white;
                 border: 1px solid #e5e7eb; 
                 border-radius: 12px; 
                 margin-bottom: 12px; 
-                background: white;
                 box-shadow: 0 1px 2px rgba(0,0,0,0.05);
                 padding: 12px;
+                width: 100%;
             }
             
-            /* Turn cells into rows inside the card */
+            /* Flex rows inside the card */
             td { 
                 display: flex; 
                 justify-content: space-between; 
-                align-items: center; 
+                align-items: flex-start; /* Align top for multi-line names */
                 padding: 8px 0; 
                 border-bottom: 1px dashed #f3f4f6; 
                 font-size: 14px;
+                width: 100%;
             }
+            
             td:last-child { border-bottom: none; }
             
-            /* Add labels before the value so we know what it is */
+            /* Labels */
             td::before { 
                 content: attr(data-label); 
                 font-weight: 600; 
-                font-size: 0.75rem; 
+                font-size: 0.7rem; 
                 text-transform: uppercase; 
                 color: #9ca3af; 
+                min-width: 60px; /* Ensure label has space */
+                margin-right: 10px;
+                padding-top: 2px;
             }
 
-            /* Hide the Index # on mobile to save space */
+            /* Fix for Long Names pushing content off screen */
+            td[data-label="Student"] {
+                text-align: right;
+            }
+            td[data-label="Student"] span {
+                text-align: right;
+                word-break: break-word; /* Force wrapping */
+                max-width: 200px;       /* Limit width to prevent overflow */
+                line-height: 1.3;
+            }
+
             td[data-label="#"] { display: none; }
-            
-            /* Fix inputs to prevent zooming */
             input { font-size: 16px !important; }
         }
     </style>
 </head>
-<body class="bg-gray-100 min-h-screen text-slate-800 p-4 md:p-6">
+<body class="bg-gray-100 min-h-screen text-slate-800 p-4 md:p-6 pb-20">
 
     <div class="max-w-[1400px] mx-auto grid grid-cols-1 lg:grid-cols-4 gap-6">
         
         <div class="lg:col-span-1 space-y-6">
-            <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 sticky top-6">
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 sticky top-6 z-10">
                 <h1 class="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600 mb-4 flex items-center gap-2">
-                    <span></span> Result Extraction of Presi Uni
+                    <span></span> Result Extraction of Presi Uni :)
                 </h1>
                 
                 <div class="space-y-3">
@@ -198,29 +213,31 @@ const HTML_CONTENT = `
                         <input type="text" id="yearMode" value="C-2025-4" class="w-full px-3 py-2 border rounded-lg text-sm text-gray-500 bg-gray-50">
                     </div>
 
-                    <button onclick="startScrape()" id="btnScrape" class="w-full py-3 bg-blue-600 active:bg-blue-800 text-white font-medium rounded-lg transition-all shadow-lg shadow-blue-500/30 flex justify-center items-center gap-2">
-                        <span>Start Extraction</span>
-                    </button>
-                    
-                    <button onclick="downloadJSON()" id="btnDownload" class="w-full py-3 bg-green-600 active:bg-green-800 text-white font-medium rounded-lg transition-all hidden">
-                        Download JSON
-                    </button>
+                    <div class="grid grid-cols-1 gap-2">
+                        <button onclick="toggleScrape()" id="btnScrape" class="w-full py-3 bg-blue-600 active:bg-blue-800 text-white font-medium rounded-lg transition-all shadow-lg shadow-blue-500/30 flex justify-center items-center gap-2">
+                            <span>Start Extraction</span>
+                        </button>
+                        
+                        <button onclick="downloadJSON()" id="btnDownload" class="hidden w-full py-3 bg-green-600 active:bg-green-800 text-white font-medium rounded-lg transition-all">
+                            Download JSON
+                        </button>
+                    </div>
                 </div>
 
                 <div class="mt-4 pt-4 border-t border-gray-100">
                     <div class="flex justify-between items-center mb-2">
                         <div class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Live Logs/Credits to Meeza ifykyk</div>
-                        <div class="text-xs text-blue-600 cursor-pointer" onclick="document.getElementById('logs').innerHTML=''">Clear</div>
+                        <div id="statusText" class="text-xs font-mono text-gray-400">Idle</div>
                     </div>
-                    <div id="logs" class="h-24 overflow-y-auto bg-gray-900 text-green-400 text-xs font-mono p-3 rounded-lg shadow-inner">
-                        <div class="text-gray-500 italic">Ready to start...</div>
+                    <div class="w-full bg-gray-200 rounded-full h-1.5 mb-2 overflow-hidden">
+                         <div id="progressBar" class="bg-blue-600 h-1.5 rounded-full" style="width: 0%"></div>
                     </div>
                 </div>
             </div>
         </div>
 
         <div class="lg:col-span-3">
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden min-h-[600px] flex flex-col">
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden min-h-[400px] flex flex-col">
                 
                 <div class="px-4 py-4 border-b border-gray-100 bg-gray-50 flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div class="flex items-center gap-3">
@@ -257,7 +274,7 @@ const HTML_CONTENT = `
                 
                 <div id="emptyState" class="flex flex-col items-center justify-center flex-grow text-gray-400 py-12">
                     <div class="text-4xl mb-2">📡</div>
-                    <p>Click "Start Extraction"</p>
+                    <p>Ready to start</p>
                 </div>
             </div>
         </div>
@@ -266,29 +283,41 @@ const HTML_CONTENT = `
     <script>
         let allStudents = [];
         let eventSource = null;
+        let isRunning = false;
         let sortDirection = { name: 1, sgpa: -1, regno: 1, index: 1 }; 
 
-        function log(msg) {
-            const logs = document.getElementById('logs');
-            const div = document.createElement('div');
-            div.textContent = "> " + msg;
-            logs.appendChild(div);
-            logs.scrollTop = logs.scrollHeight;
+        function toggleScrape() {
+            if (isRunning) {
+                stopScrape();
+            } else {
+                startScrape();
+            }
         }
 
         function startScrape() {
+            // UI Setup
+            isRunning = true;
             allStudents = [];
             renderTable();
+            
+            const btn = document.getElementById('btnScrape');
+            btn.innerHTML = '<span class="animate-pulse">🛑 Stop Extraction</span>';
+            btn.classList.remove('bg-blue-600');
+            btn.classList.add('bg-red-500');
+            
             document.getElementById('emptyState').classList.add('hidden');
             document.getElementById('btnDownload').classList.add('hidden');
-            document.getElementById('btnScrape').disabled = true;
-            document.getElementById('btnScrape').classList.add('opacity-50');
-            document.getElementById('btnScrape').innerHTML = '<span class="animate-spin">↻</span> Extracting...';
+            document.getElementById('statusText').innerText = "Connecting...";
+
+            const startVal = parseInt(document.getElementById('start').value);
+            const endVal = parseInt(document.getElementById('end').value);
+            const total = endVal - startVal + 1;
+            let processed = 0;
 
             const params = new URLSearchParams({
                 batch: document.getElementById('batch').value,
-                start: document.getElementById('start').value,
-                end: document.getElementById('end').value,
+                start: startVal,
+                end: endVal,
                 year: document.getElementById('yearMode').value
             });
             
@@ -298,30 +327,55 @@ const HTML_CONTENT = `
             eventSource.onmessage = (event) => {
                 const payload = JSON.parse(event.data);
                 
-                if (payload.type === 'log') {
-                    log(payload.data);
-                } else if (payload.type === 'result') {
+                if (payload.type === 'scanning') {
+                    processed++;
+                    updateProgress(processed, total, payload.data);
+                }
+                else if (payload.type === 'result') {
+                    processed++;
+                    updateProgress(processed, total, payload.data.regno);
                     allStudents.push(payload.data);
                     updateStats();
                     appendStudentRow(payload.data, allStudents.length - 1);
-                } else if (payload.type === 'done') {
-                    log(\`✅ DONE! Found \${payload.data.count} students.\`);
+                } 
+                else if (payload.type === 'done') {
                     finishScrape();
                 }
             };
 
             eventSource.onerror = () => {
-                log("❌ Connection Error.");
-                finishScrape();
+                // Usually closes when done or interrupted
+                if (isRunning) stopScrape(); 
             };
         }
 
-        function finishScrape() {
-            if(eventSource) eventSource.close();
-            document.getElementById('btnScrape').disabled = false;
-            document.getElementById('btnScrape').classList.remove('opacity-50');
-            document.getElementById('btnScrape').innerHTML = '<span>Start Extraction</span>';
+        function stopScrape() {
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+            }
+            isRunning = false;
+            
+            // Reset Button
+            const btn = document.getElementById('btnScrape');
+            btn.innerHTML = '<span>Start Extraction</span>';
+            btn.classList.remove('bg-red-500');
+            btn.classList.add('bg-blue-600');
+            
+            document.getElementById('statusText').innerText = "Stopped";
             document.getElementById('btnDownload').classList.remove('hidden');
+        }
+
+        function finishScrape() {
+            stopScrape();
+            document.getElementById('statusText').innerText = "Completed";
+            document.getElementById('progressBar').style.width = '100%';
+        }
+
+        function updateProgress(current, total, regno) {
+            const pct = Math.min((current / total) * 100, 100);
+            document.getElementById('progressBar').style.width = pct + '%';
+            document.getElementById('statusText').innerText = \`Checking \${regno}...\`;
         }
 
         function updateStats() {
@@ -338,7 +392,6 @@ const HTML_CONTENT = `
         function sortData(key) {
             sortDirection[key] *= -1; 
             const dir = sortDirection[key];
-
             allStudents.sort((a, b) => {
                 if (key === 'sgpa') return (parseFloat(a.sgpa) - parseFloat(b.sgpa)) * dir;
                 else if (key === 'index') return a.regno.localeCompare(b.regno) * dir;
@@ -359,7 +412,6 @@ const HTML_CONTENT = `
         function renderTable(dataOverride) {
             const tbody = document.getElementById('tableBody');
             tbody.innerHTML = '';
-            
             const data = dataOverride || allStudents;
             
             if (data.length === 0 && allStudents.length === 0) {
@@ -367,10 +419,7 @@ const HTML_CONTENT = `
                  return;
             }
             document.getElementById('emptyState').classList.add('hidden');
-
-            data.forEach((student, index) => {
-                appendStudentRow(student, index);
-            });
+            data.forEach((student, index) => appendStudentRow(student, index));
         }
 
         function appendStudentRow(student, index) {
@@ -385,19 +434,16 @@ const HTML_CONTENT = `
             else if(val > 0 && val < 6) sgpaColor = "bg-red-100 text-red-800";
 
             const tr = document.createElement('tr');
-            // Added 'main-row' class for CSS targeting
             tr.className = "main-row hover:bg-gray-50 transition-colors cursor-pointer border-b border-gray-100 fade-in";
             tr.onclick = () => toggleDetails(rowId);
             
-            // Added data-label attributes for Mobile View
+            // Note: Added <span> around the name for word-break targeting in CSS
             tr.innerHTML = \`
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" data-label="#">\${index + 1}</td>
-                <td class="px-6 py-4 whitespace-nowrap font-medium text-gray-900" data-label="Student">\${student.name}</td>
+                <td class="px-6 py-4 font-medium text-gray-900" data-label="Student"><span>\${student.name}</span></td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-mono" data-label="Reg No">\${student.regno}</td>
                 <td class="px-6 py-4 whitespace-nowrap" data-label="SGPA">
-                    <span class="px-2.5 py-1 inline-flex text-xs leading-5 font-bold rounded-full \${sgpaColor}">
-                        \${student.sgpa}
-                    </span>
+                    <span class="px-2.5 py-1 inline-flex text-xs leading-5 font-bold rounded-full \${sgpaColor}">\${student.sgpa}</span>
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-blue-500 hover:text-blue-700" data-label="Action">View Details</td>
             \`;
@@ -405,7 +451,6 @@ const HTML_CONTENT = `
 
             const detailTr = document.createElement('tr');
             detailTr.id = rowId;
-            // On mobile, we keep the hidden row behavior but style it differently if needed
             detailTr.className = "hidden-row bg-gray-50 border-b border-gray-200";
             
             let subjectsHtml = student.results.map(sub => {
@@ -421,34 +466,27 @@ const HTML_CONTENT = `
                             <span class="\${gradeClass} text-sm">\${sub.grade}</span>
                         </div>
                         <div class="mt-auto border-t border-gray-100 pt-2">\${marksStr || '<span class="text-xs italic text-gray-400">No details</span>'}</div>
-                    </div>
-                \`;
+                    </div>\`;
             }).join('');
 
-            // colspan=5 ensures it spans all columns on desktop. On mobile, the TR is a block anyway.
             detailTr.innerHTML = \`<td colspan="5" class="px-4 py-4 md:px-6"><div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">\${subjectsHtml}</div></td>\`;
             tbody.appendChild(detailTr);
         }
 
         function toggleDetails(id) {
             const el = document.getElementById(id);
-            // Toggle between table-row (for desktop) and block (for mobile)
             if (el.style.display === "block" || el.style.display === "table-row") {
                 el.style.display = "none";
             } else {
-                // Check screen width
                 el.style.display = window.innerWidth < 768 ? "block" : "table-row";
             }
         }
 
         function downloadJSON() {
             const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(allStudents, null, 2));
-            const downloadAnchorNode = document.createElement('a');
-            downloadAnchorNode.setAttribute("href", dataStr);
-            downloadAnchorNode.setAttribute("download", "final_results_data.json");
-            document.body.appendChild(downloadAnchorNode);
-            downloadAnchorNode.click();
-            downloadAnchorNode.remove();
+            const a = document.createElement('a');
+            a.href = dataStr; a.download = "final_results.json";
+            document.body.appendChild(a); a.click(); a.remove();
         }
     </script>
 </body>
@@ -475,7 +513,5 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(PORT, () => {
-    console.log(`\n🚀 DASHBOARD READY!`);
-    console.log(`👉 http://localhost:${PORT}`);
+    console.log(`\n🚀 SERVER READY`);
 });
-
