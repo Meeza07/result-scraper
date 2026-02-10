@@ -1,0 +1,13 @@
+{
+  "name": "result-scraper",
+  "version": "1.0.0",
+  "description": "University Result Scraper",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {}
+}
