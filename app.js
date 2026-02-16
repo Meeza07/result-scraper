@@ -513,7 +513,7 @@ const HTML_SHELL = `
 
     <div class="max-w-[1400px] mx-auto mb-6 flex justify-between items-center">
         <h1 class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600 flex items-center gap-2">
-            <span>⚡</span> Result Extraction of Presi Uni :) <span class="text-xs bg-blue-100 text-blue-700 px-2 rounded-full hidden md:inline-block">By Meeza ifykyk</span>
+            <span></span> Result Extraction of Presi Uni :) <span class="text-xs bg-blue-100 text-blue-700 px-2 rounded-full hidden md:inline-block">By Meeza ifykyk</span>
         </h1>
         <button onclick="toggleTheme()" class="p-2 rounded-full bg-white dark:bg-card shadow-sm border border-gray-200 dark:border-gray-700">
             <span id="themeIcon">🌙</span>
@@ -574,7 +574,7 @@ const HTML_SHELL = `
                         <tbody class="bg-white dark:bg-card divide-y divide-gray-200 dark:divide-gray-700 block md:table-row-group" id="tableBody"></tbody>
                     </table>
                 </div>
-                <div id="emptyState" class="flex flex-col items-center justify-center flex-grow text-gray-400 py-12"><div class="text-4xl mb-2">📡</div><p>Ready to extract</p></div>
+                <div id="emptyState" class="flex flex-col items-center justify-center flex-grow text-gray-400 py-12"><div class="text-4xl mb-2"></div><p>Ready to extract</p></div>
             </div>
         </div>
     </div>
@@ -645,3 +645,4 @@ const server = http.createServer((req, res) => {
 server.listen(PORT, () => {
     console.log(`\n🚀 SERVER READY`);
 });
+
