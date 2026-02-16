@@ -412,8 +412,7 @@ function clientScript() {
         // RawTotal = RawMid + RawInternal
         // So: RawInternal = (DisplayTotal / 2) - RawMid
         
-        const rawTotal = currentCalcTotal / 2;
-        const result = rawTotal - midRaw;
+        const result = currentCalcTotal - midRaw;
         
         document.getElementById('calcResult').innerText = result.toFixed(2);
     };
@@ -553,7 +552,7 @@ const HTML_SHELL = `
         <div class="bg-white dark:bg-card p-6 rounded-xl shadow-2xl w-80 border border-gray-200 dark:border-gray-600">
             <h3 class="text-lg font-bold mb-4 dark:text-white">Internal Splitter</h3>
             <p class="text-xs text-gray-500 mb-3">Total Internal (Scaled x2): <span id="modalTotal" class="font-bold text-blue-600">0</span></p>
-            <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Your Mid Term (Out of 50)</label>
+            <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Your Mid Term OR Internals (Out of 50)</label>
             <input type="number" id="calcMid" class="w-full px-3 py-2 border rounded-lg mb-4 dark:bg-slate-800 dark:border-gray-600 dark:text-white">
             <div class="p-3 bg-gray-50 dark:bg-slate-800 rounded-lg mb-4"><div class="text-xs text-gray-500">Calculated Other Component:</div><div class="text-xl font-bold text-green-600" id="calcResult">--</div></div>
             <div class="flex gap-2"><button onclick="closeCalc()" class="flex-1 py-2 bg-gray-200 dark:bg-gray-700 rounded-lg text-sm font-medium dark:text-white">Close</button><button onclick="runCalc()" class="flex-1 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium">Calculate</button></div>
@@ -589,4 +588,5 @@ const server = http.createServer((req, res) => {
 server.listen(PORT, () => {
     console.log(`\n🚀 SERVER READY`);
 });
+
 
