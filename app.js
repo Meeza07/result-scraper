@@ -433,7 +433,7 @@ const HTML_SHELL = `
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Presidency Result Portal v3.1</title>
+    <title>Presidency Result Portal By Meeza ifykyk</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -475,7 +475,7 @@ const HTML_SHELL = `
 
     <div class="max-w-[1400px] mx-auto mb-6 flex justify-between items-center">
         <h1 class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600 flex items-center gap-2">
-            <span>⚡</span> Result Portal <span class="text-xs bg-blue-100 text-blue-700 px-2 rounded-full hidden md:inline-block">v3.1</span>
+            <span></span> Result Extractor of Presi Uni :) <span class="text-xs bg-blue-100 text-blue-700 px-2 rounded-full hidden md:inline-block">By Meeza ifykyk</span>
         </h1>
         <button onclick="toggleTheme()" class="p-2 rounded-full bg-white dark:bg-card shadow-sm border border-gray-200 dark:border-gray-700">
             <span id="themeIcon">🌙</span>
@@ -487,9 +487,9 @@ const HTML_SHELL = `
             <div class="bg-white dark:bg-card p-5 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 sticky top-6 z-10">
                 <div class="space-y-3">
                     <div>
-                        <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Batch / Roll No (Smart Search)</label>
+                        <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Batch / Roll No</label>
                         <input type="text" id="batch" placeholder="20241CAI" value="20241CAI" class="w-full px-3 py-2 border rounded-lg font-mono uppercase focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50 dark:bg-slate-800 dark:border-gray-600">
-                        <div class="text-[10px] text-gray-400 mt-1">✨ Tip: Enter full roll no to search 1 person.</div>
+                        <div class="text-[10px] text-gray-400 mt-1">Tip: Enter full roll number to search 1 person.</div>
                     </div>
                     <div id="rangeInputs" class="grid grid-cols-2 gap-3 transition-all">
                         <div><label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Start</label><input type="number" id="start" value="1" class="w-full px-3 py-2 border rounded-lg bg-gray-50 dark:bg-slate-800 dark:border-gray-600"></div>
@@ -581,3 +581,4 @@ const server = http.createServer((req, res) => {
 server.listen(PORT, () => {
     console.log(`\n🚀 SERVER READY`);
 });
+
