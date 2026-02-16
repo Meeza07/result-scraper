@@ -416,19 +416,59 @@ function clientScript() {
     };
 
     window.downloadCSV = function() {
-        let csvContent = "data:text/csv;charset=utf-8,RegNo,Name,Score\n";
+        // 1. Find max subjects to determine header columns
+        let maxSubjects = 0;
+        allStudents.forEach(s => maxSubjects = Math.max(maxSubjects, s.results.length));
+
+        // 2. Create Header Row
+        let header = "RegNo,Name,SGPA,PassedCredits";
+        for(let i = 0; i < maxSubjects; i++) {
+            header += `,Subject ${i+1},Grade ${i+1},Total ${i+1}`;
+        }
+        header += "\n";
+
+        let csvContent = "data:text/csv;charset=utf-8," + header;
+
+        // 3. Build Student Rows
         allStudents.forEach(row => {
-            csvContent += `${row.regno},${row.name},${row.displayScore}\n`;
+            // Calc credits
+            let credits = row.results.filter(r => r.grade !== 'F' && r.grade !== 'RC').reduce((acc, curr) => acc + parseFloat(curr.credits || 0), 0);
+            
+            // Clean name to remove commas (prevents CSV breaking)
+            let cleanName = row.name.replace(/,/g, " ");
+            
+            let rowStr = `${row.regno},${cleanName},${row.displayScore},${credits}`;
+
+            // Add Subject Details
+            row.results.forEach(sub => {
+                let mTotal = 0, eTotal = 0;
+                if(sub.marks) {
+                    Object.entries(sub.marks).forEach(([k, v]) => {
+                        let n = parseFloat(v);
+                        if(k.toLowerCase().includes('end term')) eTotal = n * 2;
+                        else mTotal += n * 2;
+                    });
+                }
+                let total = mTotal + eTotal;
+                
+                // Clean subject name
+                let cleanSub = sub.subject.replace(/,/g, " ");
+                
+                rowStr += `,${cleanSub},${sub.grade},${total}`;
+            });
+
+            csvContent += rowStr + "\n";
         });
+
+        // 4. Download
         const encodedUri = encodeURI(csvContent);
         const link = document.createElement("a");
         link.setAttribute("href", encodedUri);
-        link.setAttribute("download", "results.csv");
+        link.setAttribute("download", "detailed_results.csv");
         document.body.appendChild(link);
         link.click();
         link.remove();
     };
-}
 
 // ================== 4. HTML SHELL ==================
 
@@ -586,6 +626,7 @@ const server = http.createServer((req, res) => {
 server.listen(PORT, () => {
     console.log(`\n🚀 SERVER READY`);
 });
+
 
 
 
