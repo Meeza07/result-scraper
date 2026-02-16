@@ -1,6 +1,8 @@
 const http = require('http');
 const https = require('https');
 const url = require('url');
+const fs = require('fs');
+const path = require('path');
 
 // FORCE SSL BYPASS
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -409,7 +411,6 @@ function clientScript() {
         document.getElementById('calcResult').innerText = result.toFixed(2);
     };
 
-    // --- UPDATED CSV EXPORT FUNCTION ---
     window.downloadCSV = function() {
         let maxSubjects = 0;
         allStudents.forEach(s => maxSubjects = Math.max(maxSubjects, s.results.length));
@@ -423,15 +424,10 @@ function clientScript() {
         let csvContent = "data:text/csv;charset=utf-8," + header;
 
         allStudents.forEach(row => {
-            // Calc credits
             let credits = row.results.filter(r => r.grade !== 'F' && r.grade !== 'RC').reduce((acc, curr) => acc + parseFloat(curr.credits || 0), 0);
-            
-            // Clean name
             let cleanName = row.name ? row.name.replace(/,/g, " ") : "Unknown";
-            
             let rowStr = `${row.regno},${cleanName},${row.displayScore},${credits}`;
 
-            // Add subjects
             row.results.forEach(sub => {
                 let mTotal = 0, eTotal = 0;
                 if(sub.marks) {
@@ -442,7 +438,6 @@ function clientScript() {
                     });
                 }
                 let total = mTotal + eTotal;
-                
                 let cleanSub = sub.subject ? sub.subject.replace(/,/g, " ") : "-";
                 rowStr += `,${cleanSub},${sub.grade},${total}`;
             });
@@ -458,7 +453,15 @@ function clientScript() {
         link.click();
         link.remove();
     };
-} 
+
+    // --- 6. Help Modal Logic ---
+    window.openHelp = function() {
+        document.getElementById('helpModal').classList.remove('hidden');
+    };
+    window.closeHelp = function() {
+        document.getElementById('helpModal').classList.add('hidden');
+    };
+}
 
 // ================== 4. HTML SHELL ==================
 
@@ -510,7 +513,7 @@ const HTML_SHELL = `
 
     <div class="max-w-[1400px] mx-auto mb-6 flex justify-between items-center">
         <h1 class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600 flex items-center gap-2">
-            <span></span> Result Extraction of Presi Uni :) <span class="text-xs bg-blue-100 text-blue-700 px-2 rounded-full hidden md:inline-block">By Meeza ifykyk</span>
+            <span>⚡</span> Result Extraction of Presi Uni :) <span class="text-xs bg-blue-100 text-blue-700 px-2 rounded-full hidden md:inline-block">By Meeza ifykyk</span>
         </h1>
         <button onclick="toggleTheme()" class="p-2 rounded-full bg-white dark:bg-card shadow-sm border border-gray-200 dark:border-gray-700">
             <span id="themeIcon">🌙</span>
@@ -532,7 +535,7 @@ const HTML_SHELL = `
                     </div>
                     <div>
                         <div class="flex justify-between items-center mb-1">
-                            <label class="block text-xs font-semibold text-gray-500 uppercase">Year Code(s)</label>
+                            <label class="block text-xs font-semibold text-gray-500 uppercase">Year Code(s) <button onclick="openHelp()" class="ml-1 text-blue-500 hover:text-blue-600">ⓘ</button></label>
                             <button onclick="addYearInput()" class="text-xs text-blue-600 hover:text-blue-700 font-bold px-2 py-0.5 bg-blue-50 rounded hover:bg-blue-100 dark:bg-slate-800 dark:text-blue-400">[ + ] Add</button>
                         </div>
                         <div id="yearInputsContainer">
@@ -586,6 +589,19 @@ const HTML_SHELL = `
             <div class="flex gap-2"><button onclick="closeCalc()" class="flex-1 py-2 bg-gray-200 dark:bg-gray-700 rounded-lg text-sm font-medium dark:text-white">Close</button><button onclick="runCalc()" class="flex-1 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium">Calculate</button></div>
         </div>
     </div>
+
+    <div id="helpModal" class="fixed inset-0 bg-black bg-opacity-80 hidden flex items-center justify-center z-50" onclick="closeHelp()">
+        <div class="bg-white dark:bg-card p-4 rounded-xl shadow-2xl max-w-3xl w-full mx-4 border border-gray-200 dark:border-gray-600 relative" onclick="event.stopPropagation()">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-bold dark:text-white">Where to find Year Code?</h3>
+                <button onclick="closeHelp()" class="text-gray-500 hover:text-red-500 text-xl font-bold">✕</button>
+            </div>
+            <div class="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
+                <img src="/help.jpg" alt="Year Code Help" class="w-full h-auto">
+            </div>
+            <p class="text-sm text-gray-500 mt-2 text-center">Check the URL bar in your student portal results page.</p>
+        </div>
+    </div>
     
     <script>
         (${clientScript.toString()})();
@@ -603,6 +619,19 @@ const server = http.createServer((req, res) => {
         res.writeHead(200, { 'Content-Type': 'text/html' });
         res.end(HTML_SHELL);
     } 
+    // NEW: Serve the help image
+    else if (parsedUrl.pathname === '/help.jpg') {
+        const imgPath = path.join(__dirname, 'help.jpg');
+        fs.readFile(imgPath, (err, content) => {
+            if (err) {
+                res.writeHead(404);
+                res.end("Image not found");
+            } else {
+                res.writeHead(200, { 'Content-Type': 'image/jpeg' });
+                res.end(content);
+            }
+        });
+    }
     else if (parsedUrl.pathname === '/api/scrape') {
         const { batch, start, end, year } = parsedUrl.query;
         scrapeData(res, batch || '20241CAI', parseInt(start)||1, parseInt(end)||60, '064', year || 'C-2025-4');
