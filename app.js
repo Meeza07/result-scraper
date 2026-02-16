@@ -39,7 +39,7 @@ async function scrapeData(res, batchPrefix, start, end, univCode, yearModesInput
 
     const sendMsg = (type, data) => res.write(`data: ${JSON.stringify({ type, data })}\n\n`);
 
-    // Handle split year codes
+    // Handle split year codes (passed as comma string from frontend logic)
     const yearCodes = yearModesInput.split(',').map(s => s.trim()).filter(s => s);
     let foundCount = 0;
 
@@ -121,7 +121,6 @@ async function scrapeData(res, batchPrefix, start, end, univCode, yearModesInput
 
 // ================== 3. CLIENT-SIDE JS (SAFE INJECTION) ==================
 
-// This function contains ALL the frontend logic. It is converted to a string to prevent escaping errors.
 function clientScript() {
     let allStudents = [];
     let eventSource = null;
@@ -142,14 +141,12 @@ function clientScript() {
             localStorage.theme = 'dark';
         }
     };
-
-    // Init Theme
     if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
         document.documentElement.classList.add('dark');
         document.getElementById('themeIcon').innerText = '☀️';
     }
 
-    // --- 2. Smart Search Input ---
+    // --- 2. Smart Search & Dynamic Inputs ---
     document.getElementById('batch').addEventListener('input', function(e) {
         const val = e.target.value.trim();
         const rangeDiv = document.getElementById('rangeInputs');
@@ -161,6 +158,17 @@ function clientScript() {
             rangeDiv.style.pointerEvents = 'auto';
         }
     });
+
+    window.addYearInput = function() {
+        const container = document.getElementById('yearInputsContainer');
+        const div = document.createElement('div');
+        div.className = "flex gap-2 mt-2";
+        div.innerHTML = `
+            <input type="text" class="year-input w-full px-3 py-2 border rounded-lg text-sm bg-gray-50 dark:bg-slate-800 dark:border-gray-600 dark:text-gray-300" placeholder="e.g. C-2024-3">
+            <button onclick="this.parentElement.remove()" class="px-3 py-2 text-red-500 hover:bg-red-50 rounded-lg border border-red-200 dark:border-red-900 dark:hover:bg-red-900/20">✕</button>
+        `;
+        container.appendChild(div);
+    };
 
     // --- 3. Scraper Control ---
     window.toggleScrape = function() {
@@ -193,6 +201,10 @@ function clientScript() {
             endVal = startVal;
         }
 
+        // Collect all year codes
+        let yearInputs = document.querySelectorAll('.year-input');
+        let yearCodes = Array.from(yearInputs).map(i => i.value.trim()).filter(v => v).join(',');
+
         const total = endVal - startVal + 1;
         let processed = 0;
 
@@ -200,7 +212,7 @@ function clientScript() {
             batch: batchPrefix,
             start: startVal,
             end: endVal,
-            year: document.getElementById('yearMode').value
+            year: yearCodes
         });
         
         if(eventSource) eventSource.close();
@@ -318,7 +330,6 @@ function clientScript() {
             if(sub.grade !== 'F') totalCredits += parseFloat(sub.credits || 0);
             let gradeClass = 'grade-' + sub.grade.replace('+','_');
             
-            // MARKS LOGIC x2
             let midTermTotal = 0;
             let endTermVal = 0;
             
@@ -332,6 +343,7 @@ function clientScript() {
 
             let displayMid = (midTermTotal > 0) ? (midTermTotal * 2) : 0;
             let displayEnd = (endTermVal > 0) ? (endTermVal * 2) : 0;
+            let totalMarks = displayMid + displayEnd; // Total out of 200
 
             return `
                 <div class="bg-white dark:bg-card p-3 rounded-lg border border-gray-200 dark:border-gray-600 shadow-sm flex flex-col">
@@ -341,15 +353,19 @@ function clientScript() {
                     </div>
                     <div class="mt-auto border-t border-gray-100 dark:border-gray-600 pt-2 space-y-1">
                         <div class="flex justify-between text-xs text-gray-600 dark:text-gray-400">
-                            <span>Internals (100):</span> 
+                            <span>Mid Term + Internals (100):</span> 
                             <div class="flex items-center gap-1">
                                 <span class="font-mono font-bold">${displayMid}</span>
-                                <button onclick="openCalc(${displayMid})" class="text-[10px] bg-gray-200 dark:bg-gray-700 px-1 rounded hover:bg-gray-300">🧮</button>
+                                <button onclick="openCalc(${displayMid})" class="text-[10px] bg-gray-200 dark:bg-gray-700 px-1 rounded hover:bg-gray-300" title="Calculate Split">🧮</button>
                             </div>
                         </div>
                         <div class="flex justify-between text-xs text-gray-600 dark:text-gray-400">
                             <span>End Term (100):</span> 
                             <span class="font-mono font-bold">${displayEnd}</span>
+                        </div>
+                        <div class="mt-1 pt-1 border-t border-gray-100 dark:border-gray-700 flex justify-between text-xs bg-green-50 dark:bg-green-900/30 px-1 py-0.5 rounded">
+                            <span class="text-green-700 dark:text-green-300 font-bold">Total:</span> 
+                            <span class="font-mono font-bold text-green-700 dark:text-green-300">${totalMarks}/200</span>
                         </div>
                     </div>
                 </div>`;
@@ -357,8 +373,9 @@ function clientScript() {
 
         detailTr.innerHTML = `
             <td colspan="5" class="px-4 py-4 md:px-6">
-                <div class="mb-3 flex gap-2">
+                <div class="mb-3 flex justify-between items-center">
                     <span class="text-xs font-bold bg-green-100 text-green-800 px-2 py-1 rounded">Passed Credits: ${totalCredits}</span>
+                    <span class="text-[10px] text-gray-400 italic">Click 🧮 icon to calculate Mid Term vs Internal split</span>
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">${subjectsHtml}</div>
             </td>`;
@@ -387,8 +404,9 @@ function clientScript() {
     window.runCalc = function() {
         const midRaw = parseFloat(document.getElementById('calcMid').value);
         if(isNaN(midRaw)) return;
-        const totalRaw = currentCalcTotal / 2;
-        const assignment = totalRaw - midRaw;
+        // Logic: Displayed Total = Mid + Assignment
+        // Assignment = Displayed Total - Mid
+        const assignment = currentCalcTotal - midRaw;
         document.getElementById('calcResult').innerText = assignment.toFixed(2);
     };
 
@@ -415,7 +433,7 @@ const HTML_SHELL = `
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Presidency Result Portal v3.0</title>
+    <title>Presidency Result Portal v3.1</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -457,7 +475,7 @@ const HTML_SHELL = `
 
     <div class="max-w-[1400px] mx-auto mb-6 flex justify-between items-center">
         <h1 class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600 flex items-center gap-2">
-            <span>⚡</span> Result Portal <span class="text-xs bg-blue-100 text-blue-700 px-2 rounded-full hidden md:inline-block">v3.0</span>
+            <span>⚡</span> Result Portal <span class="text-xs bg-blue-100 text-blue-700 px-2 rounded-full hidden md:inline-block">v3.1</span>
         </h1>
         <button onclick="toggleTheme()" class="p-2 rounded-full bg-white dark:bg-card shadow-sm border border-gray-200 dark:border-gray-700">
             <span id="themeIcon">🌙</span>
@@ -478,8 +496,13 @@ const HTML_SHELL = `
                         <div><label class="block text-xs font-semibold text-gray-500 uppercase mb-1">End</label><input type="number" id="end" value="60" class="w-full px-3 py-2 border rounded-lg bg-gray-50 dark:bg-slate-800 dark:border-gray-600"></div>
                     </div>
                     <div>
-                        <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Year Code(s)</label>
-                        <input type="text" id="yearMode" value="C-2025-4" placeholder="C-2025-4, C-2024-3" class="w-full px-3 py-2 border rounded-lg text-sm bg-gray-50 dark:bg-slate-800 dark:border-gray-600">
+                        <div class="flex justify-between items-center mb-1">
+                            <label class="block text-xs font-semibold text-gray-500 uppercase">Year Code(s)</label>
+                            <button onclick="addYearInput()" class="text-xs text-blue-600 hover:text-blue-700 font-bold px-2 py-0.5 bg-blue-50 rounded hover:bg-blue-100 dark:bg-slate-800 dark:text-blue-400">[ + ] Add</button>
+                        </div>
+                        <div id="yearInputsContainer">
+                            <input type="text" value="C-2025-4" class="year-input w-full px-3 py-2 border rounded-lg text-sm bg-gray-50 dark:bg-slate-800 dark:border-gray-600 dark:text-gray-300" placeholder="e.g. C-2025-4">
+                        </div>
                     </div>
                     <div class="grid grid-cols-1 gap-2 pt-2">
                         <button onclick="toggleScrape()" id="btnScrape" class="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-all shadow-lg shadow-blue-500/30 flex justify-center items-center gap-2"><span>Start Extraction</span></button>
