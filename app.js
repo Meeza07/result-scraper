@@ -39,7 +39,6 @@ async function scrapeData(res, batchPrefix, start, end, univCode, yearModesInput
 
     const sendMsg = (type, data) => res.write(`data: ${JSON.stringify({ type, data })}\n\n`);
 
-    // Handle split year codes (passed as comma string from frontend logic)
     const yearCodes = yearModesInput.split(',').map(s => s.trim()).filter(s => s);
     let foundCount = 0;
 
@@ -48,7 +47,6 @@ async function scrapeData(res, batchPrefix, start, end, univCode, yearModesInput
     for (let i = start; i <= end; i++) {
         const regNo = `${batchPrefix}${pad(i)}`;
         
-        // Container for cumulative data
         let aggregatedStudent = {
             regno: regNo,
             name: "Unknown",
@@ -57,7 +55,6 @@ async function scrapeData(res, batchPrefix, start, end, univCode, yearModesInput
         };
         let foundAny = false;
 
-        // Check all semesters
         for (const yearMode of yearCodes) {
             const detUrl = `${BASE_URL}?db=pub&a=getDetailedResults&regno=${regNo}&univcode=${univCode}&yearmode=${yearMode}`;
             const detJson = await secureGet(detUrl);
@@ -96,7 +93,6 @@ async function scrapeData(res, batchPrefix, start, end, univCode, yearModesInput
         }
 
         if (foundAny) {
-            // Calc Cumulative Average
             let totalSgpa = 0;
             let validSems = 0;
             aggregatedStudent.sgpa_history.forEach(h => {
@@ -146,7 +142,7 @@ function clientScript() {
         document.getElementById('themeIcon').innerText = '☀️';
     }
 
-    // --- 2. Smart Search & Dynamic Inputs ---
+    // --- 2. Smart Search & Inputs ---
     document.getElementById('batch').addEventListener('input', function(e) {
         const val = e.target.value.trim();
         const rangeDiv = document.getElementById('rangeInputs');
@@ -189,7 +185,6 @@ function clientScript() {
         document.getElementById('btnDownload').classList.add('hidden');
         document.getElementById('statusText').innerText = "Connecting...";
 
-        // Logic for Smart Search (Full Roll No vs Batch)
         const batchInput = document.getElementById('batch').value.trim();
         let batchPrefix = batchInput;
         let startVal = parseInt(document.getElementById('start').value);
@@ -201,7 +196,6 @@ function clientScript() {
             endVal = startVal;
         }
 
-        // Collect all year codes
         let yearInputs = document.querySelectorAll('.year-input');
         let yearCodes = Array.from(yearInputs).map(i => i.value.trim()).filter(v => v).join(',');
 
@@ -327,7 +321,9 @@ function clientScript() {
         
         let totalCredits = 0;
         let subjectsHtml = student.results.map(sub => {
-            if(sub.grade !== 'F') totalCredits += parseFloat(sub.credits || 0);
+            // FIX: Exclude F and RC from credits
+            if(sub.grade !== 'F' && sub.grade !== 'RC') totalCredits += parseFloat(sub.credits || 0);
+            
             let gradeClass = 'grade-' + sub.grade.replace('+','_');
             
             let midTermTotal = 0;
@@ -343,7 +339,7 @@ function clientScript() {
 
             let displayMid = (midTermTotal > 0) ? (midTermTotal * 2) : 0;
             let displayEnd = (endTermVal > 0) ? (endTermVal * 2) : 0;
-            let totalMarks = displayMid + displayEnd; // Total out of 200
+            let totalMarks = displayMid + displayEnd; 
 
             return `
                 <div class="bg-white dark:bg-card p-3 rounded-lg border border-gray-200 dark:border-gray-600 shadow-sm flex flex-col">
@@ -351,7 +347,13 @@ function clientScript() {
                         <span class="text-xs font-bold text-gray-700 dark:text-gray-300 w-3/4 truncate" title="${sub.subject}">${sub.subject}</span>
                         <span class="${gradeClass} text-sm">${sub.grade}</span>
                     </div>
+                    
                     <div class="mt-auto border-t border-gray-100 dark:border-gray-600 pt-2 space-y-1">
+                        <div class="flex justify-between text-xs text-gray-500 dark:text-gray-400 mb-1">
+                            <span>Credits:</span>
+                            <span class="font-mono font-bold">${sub.credits}</span>
+                        </div>
+
                         <div class="flex justify-between text-xs text-gray-600 dark:text-gray-400">
                             <span>Mid Term + Internals (100):</span> 
                             <div class="flex items-center gap-1">
@@ -363,7 +365,7 @@ function clientScript() {
                             <span>End Term (100):</span> 
                             <span class="font-mono font-bold">${displayEnd}</span>
                         </div>
-                        <div class="mt-1 pt-1 border-t border-gray-100 dark:border-gray-700 flex justify-between text-xs bg-green-50 dark:bg-green-900/30 px-1 py-0.5 rounded">
+                        <div class="mt-1 pt-1 border-t border-gray-100 dark:border-gray-700 flex justify-between text-xs bg-green-50 dark:bg-green-900/30 px-2 py-1 rounded">
                             <span class="text-green-700 dark:text-green-300 font-bold">Total:</span> 
                             <span class="font-mono font-bold text-green-700 dark:text-green-300">${totalMarks}/200</span>
                         </div>
@@ -375,7 +377,7 @@ function clientScript() {
             <td colspan="5" class="px-4 py-4 md:px-6">
                 <div class="mb-3 flex justify-between items-center">
                     <span class="text-xs font-bold bg-green-100 text-green-800 px-2 py-1 rounded">Passed Credits: ${totalCredits}</span>
-                    <span class="text-[10px] text-gray-400 italic">Click 🧮 icon to calculate Mid Term vs Internal split</span>
+                    <span class="text-[10px] text-gray-400 italic">Click 🧮 icon to calculate Mid Term or Internal marks</span>
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">${subjectsHtml}</div>
             </td>`;
@@ -404,10 +406,16 @@ function clientScript() {
     window.runCalc = function() {
         const midRaw = parseFloat(document.getElementById('calcMid').value);
         if(isNaN(midRaw)) return;
-        // Logic: Displayed Total = Mid + Assignment
-        // Assignment = Displayed Total - Mid
-        const assignment = currentCalcTotal - midRaw;
-        document.getElementById('calcResult').innerText = assignment.toFixed(2);
+        
+        // Logic: Displayed Total is already (RawTotal * 2)
+        // We want RawInternal.
+        // RawTotal = RawMid + RawInternal
+        // So: RawInternal = (DisplayTotal / 2) - RawMid
+        
+        const rawTotal = currentCalcTotal / 2;
+        const result = rawTotal - midRaw;
+        
+        document.getElementById('calcResult').innerText = result.toFixed(2);
     };
 
     window.downloadCSV = function() {
@@ -475,7 +483,7 @@ const HTML_SHELL = `
 
     <div class="max-w-[1400px] mx-auto mb-6 flex justify-between items-center">
         <h1 class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600 flex items-center gap-2">
-            <span></span> Result Extractor of Presi Uni :) <span class="text-xs bg-blue-100 text-blue-700 px-2 rounded-full hidden md:inline-block">By Meeza ifykyk</span>
+            <span></span> Result Portal <span class="text-xs bg-blue-100 text-blue-700 px-2 rounded-full hidden md:inline-block">By Meeza ifykyk</span>
         </h1>
         <button onclick="toggleTheme()" class="p-2 rounded-full bg-white dark:bg-card shadow-sm border border-gray-200 dark:border-gray-700">
             <span id="themeIcon">🌙</span>
@@ -547,7 +555,7 @@ const HTML_SHELL = `
             <p class="text-xs text-gray-500 mb-3">Total Internal (Scaled x2): <span id="modalTotal" class="font-bold text-blue-600">0</span></p>
             <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Your Mid Term (Out of 50)</label>
             <input type="number" id="calcMid" class="w-full px-3 py-2 border rounded-lg mb-4 dark:bg-slate-800 dark:border-gray-600 dark:text-white">
-            <div class="p-3 bg-gray-50 dark:bg-slate-800 rounded-lg mb-4"><div class="text-xs text-gray-500">Calculated Assignment:</div><div class="text-xl font-bold text-green-600" id="calcResult">--</div></div>
+            <div class="p-3 bg-gray-50 dark:bg-slate-800 rounded-lg mb-4"><div class="text-xs text-gray-500">Calculated Other Component:</div><div class="text-xl font-bold text-green-600" id="calcResult">--</div></div>
             <div class="flex gap-2"><button onclick="closeCalc()" class="flex-1 py-2 bg-gray-200 dark:bg-gray-700 rounded-lg text-sm font-medium dark:text-white">Close</button><button onclick="runCalc()" class="flex-1 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium">Calculate</button></div>
         </div>
     </div>
@@ -581,4 +589,3 @@ const server = http.createServer((req, res) => {
 server.listen(PORT, () => {
     console.log(`\n🚀 SERVER READY`);
 });
-
